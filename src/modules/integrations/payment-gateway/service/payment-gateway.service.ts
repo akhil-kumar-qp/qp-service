@@ -14,7 +14,7 @@ export class PaymentGateWayService {
     userId: number,
     amount: number,
     cardInfo: UpdateSubscriptionDto,
-  ) {
+  ): Promise<string> {
     try {
       // Simulate calling Stripe's payment intent API
       const paymentIntent = await Stripe.paymentIntents.create({
@@ -68,7 +68,7 @@ export class PaymentGateWayService {
     userId: number,
     planData: any,
     cardInfo: UpdateSubscriptionDto,
-  ) {
+  ): Promise<string> {
     const amount = planData.price;
 
     try {
@@ -80,23 +80,13 @@ export class PaymentGateWayService {
       );
 
       if (!paymentId) {
-        throw new BadRequestException({
+        throw new InternalServerErrorException({
           message: 'Payment failed: Unable to retrieve payment ID.',
           code: 'PAYMENT_FAILED',
         });
       }
 
-      // Create user payment after successful payment
-      await this.subscriptionService.createUserPayment(
-        userId,
-        cardInfo.planId,
-        paymentId,
-      );
-
-      return {
-        message: 'Payment request successful.',
-        paymentId,
-      };
+      return paymentId;
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
