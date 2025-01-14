@@ -1,3 +1,5 @@
+import { Plan } from '../types/plan.type';
+
 // mocking database data
 const SUBSCRIPTION_PLANS = [
   {
@@ -34,7 +36,7 @@ const USER_PAYMENT_DATA = [
     id: 1,
     userId: 7,
     planId: 1,
-    paymentId: 1,
+    paymentId: 'STP#1234567890',
     createdAt: new Date(),
     updatedAt: new Date(),
   },
@@ -67,7 +69,7 @@ export class SubscriptionRepository {
     };
   }
 
-  async findSubscriptionByPlanId(planId: number) {
+  async findSubscriptionByPlanId(planId: number): Promise<Plan> {
     const subscriptionData = USER_SUBSCRIPTION_DATA.find(
       (subscription) => subscription.planId === planId,
     );
@@ -93,7 +95,7 @@ export class SubscriptionRepository {
     };
   }
 
-  async createUserPayment(userId: number, planId: number, paymentId: number) {
+  async createUserPayment(userId: number, planId: number, paymentId: string) {
     USER_PAYMENT_DATA.push({
       id: USER_PAYMENT_DATA.length + 1,
       userId: userId,

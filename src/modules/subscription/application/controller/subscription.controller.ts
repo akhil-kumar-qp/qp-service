@@ -13,12 +13,10 @@ export class SubscriptionController {
     @getUserContext() userId: number,
     @Body() updateSubscriptionDto: UpdateSubscriptionDto,
   ) {
-    await this.subscriptionService.updateSubscription(
+    const planData = await this.subscriptionService.updateSubscription(
       userId,
       updateSubscriptionDto,
     );
-    response
-      .status(200)
-      .json({ message: 'Subscription upgrated successfully' });
+    response.status(200).json(planData);
   }
 }

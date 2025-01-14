@@ -1,6 +1,11 @@
 import { PaymentGateWayService } from 'src/modules/integrations/payment-gateway/service/payment-gateway.service';
 import { UpdateSubscriptionDto } from '../../application/dto/update-subscription.dto';
 import { SubscriptionRepository } from '../repository/subscription.repository';
+import { Plan } from '../types/plan.type';
+import {
+  BadRequestException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 
 export class SubscriptionService {
   constructor(
@@ -8,53 +13,71 @@ export class SubscriptionService {
     private readonly paymentGateWayService: PaymentGateWayService,
   ) {}
 
-  private async validateSubscriptionUpdate(exisitingPlan: any, newPlan: any) {
-    if (!newPlan) {
-      throw Error('Subscription not found for renewal');
-    }
-
+  private validateSubscriptionUpdate(exisitingPlan: Plan, newPlan: Plan): void {
     if (newPlan.planPrice < exisitingPlan.planPrice) {
-      throw Error('Cannot degrade form existing plan');
+      throw new BadRequestException(
+        'Cannot degrade form existing plan. Please contact support.',
+      );
     }
 
-    return newPlan;
+    return;
   }
 
-  async findSubscriptionByUserId(userId: number) {
+  private async findSubscriptionByPlanIdOrThrow(planId: number): Promise<Plan> {
+    const data =
+      await this.subscriptionRepository.findSubscriptionByPlanId(planId);
+    if (!data) {
+      throw new InternalServerErrorException(
+        `Plan not found for planId: ${planId}`,
+      );
+    }
+    return data;
+  }
+
+  async findSubscriptionByUserIdOrThrow(userId: number): Promise<Plan> {
     const data =
       await this.subscriptionRepository.findSubscriptionByUserId(userId);
 
     if (!data) {
-      throw Error('Subscription not found');
+      throw new InternalServerErrorException(
+        `Plan not found for userId: ${userId}`,
+      );
     }
+
+    if (data.endDate < new Date()) {
+      throw new InternalServerErrorException(
+        `Plan expired for userId: ${userId}`,
+      );
+    }
+
     return data;
   }
 
   async updateSubscription(
     userId: number,
     updateSubscriptionDto: UpdateSubscriptionDto,
-  ) {
-    const exisitingPlan = await this.findSubscriptionByUserId(userId);
+  ): Promise<Plan> {
+    const exisitingPlan = await this.findSubscriptionByUserIdOrThrow(userId);
 
-    const newPlan = await this.subscriptionRepository.findSubscriptionByPlanId(
+    const newPlan = await this.findSubscriptionByPlanIdOrThrow(
       updateSubscriptionDto.planId,
     );
 
-    await this.validateSubscriptionUpdate(exisitingPlan, newPlan);
+    this.validateSubscriptionUpdate(exisitingPlan, newPlan);
 
-    await this.paymentGateWayService.purchaseSubscription(
+    const paymentId = await this.paymentGateWayService.purchaseSubscription(
       userId,
       newPlan,
       updateSubscriptionDto,
     );
-    return;
-  }
 
-  async createUserPayment(userId: number, planId: number, paymentId: number) {
-    return await this.subscriptionRepository.createUserPayment(
+    // Create user payment after successful payment
+    await this.subscriptionRepository.createUserPayment(
       userId,
-      planId,
+      newPlan.planId,
       paymentId,
     );
+
+    return newPlan;
   }
 }

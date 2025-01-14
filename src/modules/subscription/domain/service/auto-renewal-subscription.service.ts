@@ -5,11 +5,13 @@ import { UpdateSubscriptionDto } from 'src/modules/subscription/application/dto/
 import { UserService } from 'src/modules/user/domain/service/user.service';
 import { PaymentGateWayService } from 'src/modules/integrations/payment-gateway/service/payment-gateway.service';
 import { CustomLogger } from 'src/common-lib/utility/custom-logger';
+import { SubscriptionRepository } from '../repository/subscription.repository';
 
 @Injectable()
 export class AutoRenewalService {
   constructor(
     private readonly subscriptionService: SubscriptionService,
+    private readonly subscriptionRepository: SubscriptionRepository,
     private readonly paymentGatewayService: PaymentGateWayService,
     private readonly userService: UserService,
     private readonly customLogger: CustomLogger,
@@ -28,7 +30,9 @@ export class AutoRenewalService {
       try {
         // Fetch the user's current subscription plan details
         const planData =
-          await this.subscriptionService.findSubscriptionByUserId(user.id);
+          await this.subscriptionService.findSubscriptionByUserIdOrThrow(
+            user.id,
+          );
 
         if (!planData) {
           this.customLogger.error(
@@ -49,22 +53,30 @@ export class AutoRenewalService {
         };
 
         // Call the payment gateway service to renew the subscription
-        const renewalSuccessful =
-          await this.paymentGatewayService.purchaseSubscription(
-            user.id,
-            planData,
-            cardInfo,
-          );
+        const paymentId = await this.paymentGatewayService.purchaseSubscription(
+          user.id,
+          planData,
+          cardInfo,
+        );
 
-        if (renewalSuccessful) {
-          this.customLogger.info(
-            `Subscription renewed successfully for user ${user.id}`,
-          );
-        } else {
+        if (!paymentId) {
           this.customLogger.error(
             `Failed to renew subscription for user ${user.id}`,
           );
         }
+
+        // Create user payment after successful payment
+        await this.subscriptionRepository.createUserPayment(
+          user.id,
+          planData.planId,
+          paymentId,
+        );
+
+        this.customLogger.info(
+          `Subscription renewed successfully for user ${user.id} for paymentID: ${paymentId}`,
+        );
+
+        return;
       } catch (error) {
         this.customLogger.error(
           `Error renewing subscription for user ${user.id}: ${error}`,
